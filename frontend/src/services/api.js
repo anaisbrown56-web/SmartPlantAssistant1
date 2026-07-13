@@ -4,6 +4,12 @@ import { clientDemo, BACKEND_UNAVAILABLE_MESSAGE } from './demoData';
 // Use proxy in development (same-origin = cookies work), direct URL in production
 const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
 
+// On Vercel (or any static host) with no API URL configured, never call /api —
+// those routes serve index.html and crash the React UI.
+const shouldUseClientDemoByDefault =
+  process.env.REACT_APP_FORCE_CLIENT_DEMO === 'true' ||
+  (!process.env.REACT_APP_API_URL && process.env.NODE_ENV === 'production');
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -14,7 +20,7 @@ const api = axios.create({
 });
 
 /** When true, all reads come from client-side demo data (no Flask backend). */
-let clientDemoMode = process.env.REACT_APP_FORCE_CLIENT_DEMO === 'true';
+let clientDemoMode = shouldUseClientDemoByDefault;
 
 export const isClientDemoMode = () => clientDemoMode;
 
@@ -28,6 +34,30 @@ const isNetworkFailure = (error) =>
   error.code === 'ERR_NETWORK' ||
   error.message?.includes('Network Error');
 
+/** SPA hosts often return index.html (200) for missing API routes — treat as failure. */
+const isInvalidApiPayload = (data) => {
+  if (data == null) return true;
+  if (typeof data === 'string') {
+    const trimmed = data.trim();
+    return trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html');
+  }
+  return false;
+};
+
+const ensureJsonObject = (data) => {
+  if (isInvalidApiPayload(data) || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Invalid API response');
+  }
+  return data;
+};
+
+const ensureJsonArray = (data) => {
+  if (isInvalidApiPayload(data) || !Array.isArray(data)) {
+    throw new Error('Invalid API response');
+  }
+  return data;
+};
+
 // Demo mode status
 export const getDemoStatus = async () => {
   if (clientDemoMode) {
@@ -39,9 +69,12 @@ export const getDemoStatus = async () => {
   }
   try {
     const response = await api.get('/demo-status');
-    return response.data;
+    const data = ensureJsonObject(response.data);
+    if (typeof data.demo_environment !== 'boolean') {
+      throw new Error('Invalid demo-status payload');
+    }
+    return data;
   } catch (error) {
-    // No backend on this deploy — fall back to client demo
     clientDemoMode = true;
     return {
       demo_environment: true,
@@ -60,9 +93,10 @@ export const login = async (username, password) => {
   }
   try {
     const response = await api.post('/login', { username, password });
-    return response.data;
+    return ensureJsonObject(response.data);
   } catch (error) {
-    if (isNetworkFailure(error)) {
+    if (error.isBackendUnavailable) throw error;
+    if (isNetworkFailure(error) || error.message === 'Invalid API response') {
       clientDemoMode = true;
       const err = new Error(BACKEND_UNAVAILABLE_MESSAGE);
       err.isBackendUnavailable = true;
@@ -80,9 +114,10 @@ export const register = async (username, email, password) => {
   }
   try {
     const response = await api.post('/register', { username, email, password });
-    return response.data;
+    return ensureJsonObject(response.data);
   } catch (error) {
-    if (isNetworkFailure(error)) {
+    if (error.isBackendUnavailable) throw error;
+    if (isNetworkFailure(error) || error.message === 'Invalid API response') {
       clientDemoMode = true;
       const err = new Error(BACKEND_UNAVAILABLE_MESSAGE);
       err.isBackendUnavailable = true;
@@ -109,7 +144,7 @@ export const getCurrentUser = async () => {
     throw new Error('Not authenticated');
   }
   const response = await api.get('/user');
-  return response.data;
+  return ensureJsonObject(response.data);
 };
 
 export const updateUserLocation = async (location) => {
@@ -127,9 +162,9 @@ export const getPlants = async () => {
   if (clientDemoMode) return clientDemo.getPlants();
   try {
     const response = await api.get('/plants');
-    return response.data;
+    return ensureJsonArray(response.data);
   } catch (error) {
-    if (isNetworkFailure(error)) {
+    if (isNetworkFailure(error) || error.message === 'Invalid API response') {
       clientDemoMode = true;
       return clientDemo.getPlants();
     }
@@ -163,9 +198,9 @@ export const fetchSensorData = async (plantId = null) => {
   try {
     const params = plantId ? { plant_id: plantId } : {};
     const response = await api.get('/sensor-data', { params });
-    return response.data;
+    return ensureJsonObject(response.data);
   } catch (error) {
-    if (isNetworkFailure(error)) {
+    if (isNetworkFailure(error) || error.message === 'Invalid API response') {
       clientDemoMode = true;
       return clientDemo.getSensorData();
     }
@@ -189,9 +224,9 @@ export const getSensorHistory = async (plantId, limit = 20) => {
     const response = await api.get('/sensor-data/history', {
       params: { plant_id: plantId, limit },
     });
-    return response.data;
+    return ensureJsonArray(response.data);
   } catch (error) {
-    if (isNetworkFailure(error)) {
+    if (isNetworkFailure(error) || error.message === 'Invalid API response') {
       clientDemoMode = true;
       return clientDemo.getSensorHistory(limit);
     }
@@ -209,9 +244,9 @@ export const fetchWeather = async (lat = null, lon = null) => {
       params.lon = lon;
     }
     const response = await api.get('/weather', { params });
-    return response.data;
+    return ensureJsonObject(response.data);
   } catch (err) {
-    if (isNetworkFailure(err)) {
+    if (isNetworkFailure(err) || err.message === 'Invalid API response') {
       clientDemoMode = true;
       return clientDemo.getWeather();
     }
@@ -234,9 +269,9 @@ export const fetchPrediction = async (sensorData, weatherData) => {
       sensor: sensorData,
       weather: weatherData,
     });
-    return response.data;
+    return ensureJsonObject(response.data);
   } catch (error) {
-    if (isNetworkFailure(error)) {
+    if (isNetworkFailure(error) || error.message === 'Invalid API response') {
       clientDemoMode = true;
       return clientDemo.getPrediction();
     }
@@ -249,9 +284,9 @@ export const getPlantHealth = async (plantId) => {
   if (clientDemoMode) return clientDemo.getPlantHealth();
   try {
     const response = await api.get(`/plant-health/${plantId}`);
-    return response.data;
+    return ensureJsonObject(response.data);
   } catch (error) {
-    if (isNetworkFailure(error)) {
+    if (isNetworkFailure(error) || error.message === 'Invalid API response') {
       clientDemoMode = true;
       return clientDemo.getPlantHealth();
     }
@@ -267,9 +302,9 @@ export const sendChatMessage = async (message, context) => {
       message,
       context,
     });
-    return response.data;
+    return ensureJsonObject(response.data);
   } catch (error) {
-    if (isNetworkFailure(error)) {
+    if (isNetworkFailure(error) || error.message === 'Invalid API response') {
       clientDemoMode = true;
       return clientDemo.getChatReply(message, context);
     }

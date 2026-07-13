@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import api from '../services/api';
+import api, { isClientDemoMode, BACKEND_UNAVAILABLE_MESSAGE } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -11,19 +11,35 @@ export const useAuth = () => {
   return context;
 };
 
+const isHtmlPayload = (data) =>
+  typeof data === 'string' &&
+  (data.trim().startsWith('<!DOCTYPE') || data.trim().startsWith('<html'));
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    // Check if user is already logged in
     checkAuth();
   }, []);
 
   const checkAuth = async () => {
+    // Static deploys with no backend: skip session check
+    if (isClientDemoMode()) {
+      setUser(null);
+      setIsAuthenticated(false);
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await api.get('/user');
+      if (isHtmlPayload(response.data) || !response.data?.id) {
+        setUser(null);
+        setIsAuthenticated(false);
+        return;
+      }
       setUser(response.data);
       setIsAuthenticated(true);
     } catch (error) {
@@ -35,13 +51,25 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = async (username, password) => {
+    if (isClientDemoMode()) {
+      return {
+        success: false,
+        error: BACKEND_UNAVAILABLE_MESSAGE,
+      };
+    }
+
     try {
       const response = await api.post('/login', { username, password });
-      
-      // Login was successful - set user state
+      if (isHtmlPayload(response.data) || !response.data?.user) {
+        return {
+          success: false,
+          error: BACKEND_UNAVAILABLE_MESSAGE,
+        };
+      }
+
       setUser(response.data.user);
       setIsAuthenticated(true);
-      
+
       return { success: true };
     } catch (error) {
       console.error('Login error:', error);
@@ -49,9 +77,10 @@ export const AuthProvider = ({ children }) => {
         error.isBackendUnavailable ||
         !error.response ||
         error.code === 'ERR_NETWORK' ||
-        error.code === 'ECONNABORTED';
+        error.code === 'ECONNABORTED' ||
+        isHtmlPayload(error.response?.data);
       const errorMessage = isBackendDown
-        ? 'The backend is not hooked up to this live deployment yet. We are working on this.'
+        ? BACKEND_UNAVAILABLE_MESSAGE
         : (error.response?.data?.error || error.response?.data?.details || error.message || 'Login failed');
       return {
         success: false,
@@ -61,16 +90,29 @@ export const AuthProvider = ({ children }) => {
   };
 
   const register = async (username, email, password, location = null) => {
+    if (isClientDemoMode()) {
+      return {
+        success: false,
+        error: BACKEND_UNAVAILABLE_MESSAGE,
+      };
+    }
+
     try {
       const payload = { username, email, password };
       if (location && location.trim()) {
         payload.location = location.trim();
       }
       const response = await api.post('/register', payload);
-      
+      if (isHtmlPayload(response.data) || !response.data?.user) {
+        return {
+          success: false,
+          error: BACKEND_UNAVAILABLE_MESSAGE,
+        };
+      }
+
       setUser(response.data.user);
       setIsAuthenticated(true);
-      
+
       return { success: true };
     } catch (error) {
       console.error('Registration error:', error);
@@ -78,9 +120,10 @@ export const AuthProvider = ({ children }) => {
         error.isBackendUnavailable ||
         !error.response ||
         error.code === 'ERR_NETWORK' ||
-        error.code === 'ECONNABORTED';
+        error.code === 'ECONNABORTED' ||
+        isHtmlPayload(error.response?.data);
       const errorMessage = isBackendDown
-        ? 'The backend is not hooked up to this live deployment yet. We are working on this.'
+        ? BACKEND_UNAVAILABLE_MESSAGE
         : (error.response?.data?.error || error.response?.data?.details || error.message || 'Registration failed');
       return {
         success: false,
@@ -91,11 +134,14 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await api.post('/logout');
-      setUser(null);
-      setIsAuthenticated(false);
+      if (!isClientDemoMode()) {
+        await api.post('/logout');
+      }
     } catch (error) {
       console.error('Logout error:', error);
+    } finally {
+      setUser(null);
+      setIsAuthenticated(false);
     }
   };
 
@@ -115,4 +161,3 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   );
 };
-

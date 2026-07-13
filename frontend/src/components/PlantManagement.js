@@ -57,7 +57,7 @@ const PlantManagement = ({
       <div className="plant-selector">
         <h3>My Plants</h3>
         <div className="plants-list">
-          {plants.map(plant => (
+          {(Array.isArray(plants) ? plants : []).map(plant => (
             <div
               key={plant.id}
               className={`plant-item ${selectedPlantId === plant.id ? 'active' : ''}`}

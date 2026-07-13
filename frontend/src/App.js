@@ -14,9 +14,10 @@ function AppContent() {
   const [forceLogin, setForceLogin] = useState(false);
 
   useEffect(() => {
+    // Prefer client demo immediately in production with no API URL
     getDemoStatus()
-      .then((data) => setDemoEnvironment(!!data.demo_environment))
-      .catch(() => setDemoEnvironment(false))
+      .then((data) => setDemoEnvironment(!!data?.demo_environment || !!data?.client_fallback))
+      .catch(() => setDemoEnvironment(true))
       .finally(() => setDemoStatusLoaded(true));
   }, []);
 
