@@ -21,15 +21,27 @@ const Chatbot = ({
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const messagesContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const hasUserInteracted = useRef(false);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollChatToBottom = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    // Scroll only inside the chat panel — never the whole page
+    container.scrollTop = container.scrollHeight;
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (hasUserInteracted.current) {
+      scrollChatToBottom();
+    }
+  }, [messages, loading]);
+
+  // Ensure landing on the page starts at the top
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   // Log when context data updates (for debugging)
   useEffect(() => {
@@ -42,6 +54,7 @@ const Chatbot = ({
     e.preventDefault();
     if (!input.trim() || loading) return;
 
+    hasUserInteracted.current = true;
     const userMessage = input.trim();
     setInput('');
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
@@ -103,7 +116,7 @@ const Chatbot = ({
         <h3>💬 Plant Care Assistant</h3>
         <span className="chatbot-status">{isDemo ? 'Synced to demo data' : 'AI-powered'}</span>
       </div>
-      <div className="chatbot-messages">
+      <div className="chatbot-messages" ref={messagesContainerRef}>
         {messages.map((msg, idx) => (
           <div key={idx} className={`message ${msg.role}`}>
             <div className="message-content">{msg.content}</div>
