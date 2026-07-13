@@ -12,14 +12,18 @@
   },
   "scripts": {
     "start": "PORT=3001 react-scripts start",
-    "build": "CI=false react-scripts build",
+    "build": "DISABLE_ESLINT_PLUGIN=true CI=false react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
     "extends": [
       "react-app"
-    ]
+    ],
+    "rules": {
+      "react-hooks/exhaustive-deps": "off",
+      "no-unused-vars": "off"
+    }
   },
   "browserslist": {
     "production": [

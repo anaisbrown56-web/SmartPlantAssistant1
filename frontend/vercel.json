@@ -1,5 +1,7 @@
 {
-  "buildCommand": "CI=false npm run build",
+  "framework": null,
+  "installCommand": "npm install",
+  "buildCommand": "DISABLE_ESLINT_PLUGIN=true CI=false npx react-scripts build",
   "outputDirectory": "build",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }

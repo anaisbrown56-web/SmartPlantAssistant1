@@ -49,7 +49,7 @@ const PlantHealthScore = ({ plantId }) => {
     );
   }
 
-  const { score, status, details, factors, current_values, confidence, probabilities, model_type } = healthData;
+  const { score, status, details, factors, current_values, confidence, model_type } = healthData;
   
   // Safety check for current_values
   if (!current_values || !details) {
