@@ -257,4 +257,4 @@ class ClientDemoGenerator {
 export const clientDemo = new ClientDemoGenerator();
 
 export const BACKEND_UNAVAILABLE_MESSAGE =
-  'The backend is not hooked up to this live deployment yet. We are working on this.';
+  'Account sign-in is unavailable in this preview. Live authentication will be available in a future update.';
