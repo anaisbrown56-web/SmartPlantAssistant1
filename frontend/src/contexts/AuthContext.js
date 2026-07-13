@@ -42,19 +42,17 @@ export const AuthProvider = ({ children }) => {
       setUser(response.data.user);
       setIsAuthenticated(true);
       
-      // Don't verify session immediately - cookie might not be set yet
-      // The session will be checked on next page load or navigation
-      
       return { success: true };
     } catch (error) {
       console.error('Login error:', error);
-      console.error('Error details:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        message: error.message
-      });
-      const errorMessage = error.response?.data?.error || error.response?.data?.details || error.message || 'Login failed';
+      const isBackendDown =
+        error.isBackendUnavailable ||
+        !error.response ||
+        error.code === 'ERR_NETWORK' ||
+        error.code === 'ECONNABORTED';
+      const errorMessage = isBackendDown
+        ? 'The backend is not hooked up to this live deployment yet. We are working on this.'
+        : (error.response?.data?.error || error.response?.data?.details || error.message || 'Login failed');
       return {
         success: false,
         error: errorMessage
@@ -70,24 +68,23 @@ export const AuthProvider = ({ children }) => {
       }
       const response = await api.post('/register', payload);
       
-      // Registration was successful - set user state
       setUser(response.data.user);
       setIsAuthenticated(true);
-      
-      // Don't verify session immediately - cookie might not be set yet
       
       return { success: true };
     } catch (error) {
       console.error('Registration error:', error);
-      console.error('Error details:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        message: error.message
-      });
+      const isBackendDown =
+        error.isBackendUnavailable ||
+        !error.response ||
+        error.code === 'ERR_NETWORK' ||
+        error.code === 'ECONNABORTED';
+      const errorMessage = isBackendDown
+        ? 'The backend is not hooked up to this live deployment yet. We are working on this.'
+        : (error.response?.data?.error || error.response?.data?.details || error.message || 'Registration failed');
       return {
         success: false,
-        error: error.response?.data?.error || error.response?.data?.details || error.message || 'Registration failed'
+        error: errorMessage
       };
     }
   };

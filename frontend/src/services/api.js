@@ -1,7 +1,7 @@
 import axios from 'axios';
+import { clientDemo, BACKEND_UNAVAILABLE_MESSAGE } from './demoData';
 
 // Use proxy in development (same-origin = cookies work), direct URL in production
-// The proxy in package.json forwards /api/* to http://localhost:5001/api/*
 const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
 
 const api = axios.create({
@@ -9,80 +9,199 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true, // Include cookies for session management
+  withCredentials: true,
+  timeout: 8000,
 });
+
+/** When true, all reads come from client-side demo data (no Flask backend). */
+let clientDemoMode = process.env.REACT_APP_FORCE_CLIENT_DEMO === 'true';
+
+export const isClientDemoMode = () => clientDemoMode;
+
+export const enableClientDemoMode = () => {
+  clientDemoMode = true;
+};
+
+const isNetworkFailure = (error) =>
+  !error.response ||
+  error.code === 'ECONNABORTED' ||
+  error.code === 'ERR_NETWORK' ||
+  error.message?.includes('Network Error');
 
 // Demo mode status
 export const getDemoStatus = async () => {
-  const response = await api.get('/demo-status');
-  return response.data;
+  if (clientDemoMode) {
+    return {
+      demo_environment: true,
+      client_fallback: true,
+      message: 'This data is a placeholder to show how the site works.',
+    };
+  }
+  try {
+    const response = await api.get('/demo-status');
+    return response.data;
+  } catch (error) {
+    // No backend on this deploy — fall back to client demo
+    clientDemoMode = true;
+    return {
+      demo_environment: true,
+      client_fallback: true,
+      message: 'This data is a placeholder to show how the site works.',
+    };
+  }
 };
 
 // Authentication
 export const login = async (username, password) => {
-  const response = await api.post('/login', { username, password });
-  return response.data;
+  if (clientDemoMode) {
+    const err = new Error(BACKEND_UNAVAILABLE_MESSAGE);
+    err.isBackendUnavailable = true;
+    throw err;
+  }
+  try {
+    const response = await api.post('/login', { username, password });
+    return response.data;
+  } catch (error) {
+    if (isNetworkFailure(error)) {
+      clientDemoMode = true;
+      const err = new Error(BACKEND_UNAVAILABLE_MESSAGE);
+      err.isBackendUnavailable = true;
+      throw err;
+    }
+    throw error;
+  }
 };
 
 export const register = async (username, email, password) => {
-  const response = await api.post('/register', { username, email, password });
-  return response.data;
+  if (clientDemoMode) {
+    const err = new Error(BACKEND_UNAVAILABLE_MESSAGE);
+    err.isBackendUnavailable = true;
+    throw err;
+  }
+  try {
+    const response = await api.post('/register', { username, email, password });
+    return response.data;
+  } catch (error) {
+    if (isNetworkFailure(error)) {
+      clientDemoMode = true;
+      const err = new Error(BACKEND_UNAVAILABLE_MESSAGE);
+      err.isBackendUnavailable = true;
+      throw err;
+    }
+    throw error;
+  }
 };
 
 export const logout = async () => {
-  const response = await api.post('/logout');
-  return response.data;
+  if (clientDemoMode) {
+    return { message: 'Logged out' };
+  }
+  try {
+    const response = await api.post('/logout');
+    return response.data;
+  } catch (error) {
+    return { message: 'Logged out' };
+  }
 };
 
 export const getCurrentUser = async () => {
+  if (clientDemoMode) {
+    throw new Error('Not authenticated');
+  }
   const response = await api.get('/user');
   return response.data;
 };
 
 export const updateUserLocation = async (location) => {
-  const response = await api.put('/user/location', {
-    location
-  });
+  if (clientDemoMode) {
+    const err = new Error(BACKEND_UNAVAILABLE_MESSAGE);
+    err.isBackendUnavailable = true;
+    throw err;
+  }
+  const response = await api.put('/user/location', { location });
   return response.data;
 };
 
 // Plants
 export const getPlants = async () => {
-  const response = await api.get('/plants');
-  return response.data;
+  if (clientDemoMode) return clientDemo.getPlants();
+  try {
+    const response = await api.get('/plants');
+    return response.data;
+  } catch (error) {
+    if (isNetworkFailure(error)) {
+      clientDemoMode = true;
+      return clientDemo.getPlants();
+    }
+    throw error;
+  }
 };
 
 export const createPlant = async (name, sensorId) => {
+  if (clientDemoMode) {
+    const err = new Error(BACKEND_UNAVAILABLE_MESSAGE);
+    err.isBackendUnavailable = true;
+    throw err;
+  }
   const response = await api.post('/plants', { name, sensor_id: sensorId });
   return response.data;
 };
 
 export const deletePlant = async (plantId) => {
+  if (clientDemoMode) {
+    const err = new Error(BACKEND_UNAVAILABLE_MESSAGE);
+    err.isBackendUnavailable = true;
+    throw err;
+  }
   const response = await api.delete(`/plants/${plantId}`);
   return response.data;
 };
 
 // Sensor Data
 export const fetchSensorData = async (plantId = null) => {
-  const params = plantId ? { plant_id: plantId } : {};
-  const response = await api.get('/sensor-data', { params });
-  return response.data;
+  if (clientDemoMode) return clientDemo.getSensorData();
+  try {
+    const params = plantId ? { plant_id: plantId } : {};
+    const response = await api.get('/sensor-data', { params });
+    return response.data;
+  } catch (error) {
+    if (isNetworkFailure(error)) {
+      clientDemoMode = true;
+      return clientDemo.getSensorData();
+    }
+    throw error;
+  }
 };
 
 export const updateSensorData = async (data) => {
+  if (clientDemoMode) {
+    const err = new Error(BACKEND_UNAVAILABLE_MESSAGE);
+    err.isBackendUnavailable = true;
+    throw err;
+  }
   const response = await api.post('/sensor-data', data);
   return response.data;
 };
 
 export const getSensorHistory = async (plantId, limit = 20) => {
-  const response = await api.get('/sensor-data/history', {
-    params: { plant_id: plantId, limit }
-  });
-  return response.data;
+  if (clientDemoMode) return clientDemo.getSensorHistory(limit);
+  try {
+    const response = await api.get('/sensor-data/history', {
+      params: { plant_id: plantId, limit },
+    });
+    return response.data;
+  } catch (error) {
+    if (isNetworkFailure(error)) {
+      clientDemoMode = true;
+      return clientDemo.getSensorHistory(limit);
+    }
+    throw error;
+  }
 };
 
 // Weather
 export const fetchWeather = async (lat = null, lon = null) => {
+  if (clientDemoMode) return clientDemo.getWeather();
   try {
     const params = {};
     if (lat !== null && lon !== null) {
@@ -92,36 +211,71 @@ export const fetchWeather = async (lat = null, lon = null) => {
     const response = await api.get('/weather', { params });
     return response.data;
   } catch (err) {
-    // Return error object instead of throwing
+    if (isNetworkFailure(err)) {
+      clientDemoMode = true;
+      return clientDemo.getWeather();
+    }
     return {
       error: 'Failed to fetch weather',
-      message: err.response?.data?.message || err.response?.data?.error || err.message || 'Unable to load weather data'
+      message:
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        'Unable to load weather data',
     };
   }
 };
 
 // Predictions
 export const fetchPrediction = async (sensorData, weatherData) => {
-  const response = await api.post('/predict', {
-    sensor: sensorData,
-    weather: weatherData,
-  });
-  return response.data;
+  if (clientDemoMode) return clientDemo.getPrediction();
+  try {
+    const response = await api.post('/predict', {
+      sensor: sensorData,
+      weather: weatherData,
+    });
+    return response.data;
+  } catch (error) {
+    if (isNetworkFailure(error)) {
+      clientDemoMode = true;
+      return clientDemo.getPrediction();
+    }
+    throw error;
+  }
 };
 
 // Plant Health
 export const getPlantHealth = async (plantId) => {
-  const response = await api.get(`/plant-health/${plantId}`);
-  return response.data;
+  if (clientDemoMode) return clientDemo.getPlantHealth();
+  try {
+    const response = await api.get(`/plant-health/${plantId}`);
+    return response.data;
+  } catch (error) {
+    if (isNetworkFailure(error)) {
+      clientDemoMode = true;
+      return clientDemo.getPlantHealth();
+    }
+    throw error;
+  }
 };
 
 // Chatbot
 export const sendChatMessage = async (message, context) => {
-  const response = await api.post('/chat', {
-    message,
-    context
-  });
-  return response.data;
+  if (clientDemoMode) return clientDemo.getChatReply(message, context);
+  try {
+    const response = await api.post('/chat', {
+      message,
+      context,
+    });
+    return response.data;
+  } catch (error) {
+    if (isNetworkFailure(error)) {
+      clientDemoMode = true;
+      return clientDemo.getChatReply(message, context);
+    }
+    throw error;
+  }
 };
 
+export { BACKEND_UNAVAILABLE_MESSAGE };
 export default api;
