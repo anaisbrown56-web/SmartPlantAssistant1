@@ -5,8 +5,6 @@ import {
   fetchWeather,
   fetchPrediction,
   getPlants,
-  createPlant,
-  deletePlant,
   getSensorHistory,
   getPlantHealth
 } from '../services/api';
@@ -23,7 +21,7 @@ import Chatbot from './Chatbot';
 import LocationSettings from './LocationSettings';
 import './Dashboard.css';
 
-const Dashboard = () => {
+const Dashboard = ({ isGuestDemo = false, demoEnvironment = false, onSignIn = null }) => {
   const { user, logout } = useAuth();
   const [sensorData, setSensorData] = useState(null);
   const [weatherData, setWeatherData] = useState(null);
@@ -69,6 +67,8 @@ const Dashboard = () => {
       if (plantsData.length === 0) {
         setError('No plants found. Please add a plant first.');
         setLoading(false);
+      } else {
+        setError(null);
       }
     } catch (err) {
       console.error('Error loading plants:', err);
@@ -264,8 +264,14 @@ const Dashboard = () => {
             />
           </div>
           <div className="user-info">
-            <span>Welcome, {user?.username}</span>
-            <button onClick={logout} className="logout-button">Logout</button>
+            <span>{isGuestDemo ? 'Guest · Basil demo' : `Welcome, ${user?.username}`}</span>
+            {isGuestDemo ? (
+              onSignIn && (
+                <button onClick={onSignIn} className="logout-button">Sign in</button>
+              )
+            ) : (
+              <button onClick={logout} className="logout-button">Logout</button>
+            )}
           </div>
         </div>
       </div>
@@ -276,16 +282,17 @@ const Dashboard = () => {
         onPlantSelect={setSelectedPlantId}
         onPlantCreated={handlePlantCreated}
         onPlantDeleted={handlePlantDeleted}
+        readOnly={isGuestDemo || demoEnvironment}
       />
 
       {error && plants.length === 0 && (
         <div className="error-banner">{error}</div>
       )}
 
-      {selectedPlantId && !error && (
+      {selectedPlantId && (
         <div className="content">
           {/* Sensor Data - Full Width Horizontal Row */}
-          <SensorDashboard sensorData={sensorData} />
+          <SensorDashboard sensorData={sensorData} demoEnvironment={demoEnvironment} />
 
           {/* Main Dashboard Grid */}
           <div className="main-dashboard-grid">
@@ -325,8 +332,14 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Location Settings at Bottom */}
-      <LocationSettings />
+      {/* Location Settings at Bottom — hide for guests in demo */}
+      {!isGuestDemo && <LocationSettings />}
+
+      {demoEnvironment && (
+        <div className="demo-banner demo-banner-bottom" role="status">
+          This data is a placeholder to show how the site works.
+        </div>
+      )}
     </div>
   );
 };

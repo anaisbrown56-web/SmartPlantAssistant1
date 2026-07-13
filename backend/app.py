@@ -3,11 +3,13 @@ from flask_cors import CORS
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user, UserMixin
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
 import requests
 import numpy as np
 from datetime import datetime, timezone
 import os
 import secrets
+from demo_data import demo_generator
 # Load environment variables from .env file (optional)
 try:
     from dotenv import load_dotenv
@@ -25,6 +27,13 @@ except ImportError:
     print('Using system environment variables only.')
 
 app = Flask(__name__)
+# DEMO_ENVIRONMENT: when true, serve drifting placeholder basil data and allow guest viewing
+DEMO_ENVIRONMENT = os.environ.get('DEMO_ENVIRONMENT', 'false').strip().lower() in ('true', '1', 'yes')
+if DEMO_ENVIRONMENT:
+    print('🎭 DEMO_ENVIRONMENT=true — serving placeholder basil demo data (guest access enabled)')
+else:
+    print('✅ DEMO_ENVIRONMENT=false — using live sensor/database data')
+
 # SECRET_KEY must be consistent across app restarts for sessions to work
 # If not set in .env, use a fixed development key (change in production!)
 SECRET_KEY_ENV = os.environ.get('SECRET_KEY')
@@ -84,6 +93,17 @@ login_manager.login_view = None  # Don't redirect for API
 def unauthorized():
     """Handle unauthorized access - return 401 for API"""
     return jsonify({'error': 'Authentication required'}), 401
+
+def login_required_unless_demo(f):
+    """Require login unless DEMO_ENVIRONMENT is enabled (guest demo viewing)."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if DEMO_ENVIRONMENT:
+            return f(*args, **kwargs)
+        if not current_user.is_authenticated:
+            return unauthorized()
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Database Models
 class User(UserMixin, db.Model):
@@ -366,7 +386,22 @@ def login():
 @app.route('/api/health', methods=['GET'])
 def health():
     """Health check endpoint"""
-    return jsonify({'status': 'ok', 'message': 'Server is running'})
+    return jsonify({
+        'status': 'ok',
+        'message': 'Server is running',
+        'demo_environment': DEMO_ENVIRONMENT,
+    })
+
+@app.route('/api/demo-status', methods=['GET'])
+def demo_status():
+    """Whether the server is running in demo/placeholder mode."""
+    return jsonify({
+        'demo_environment': DEMO_ENVIRONMENT,
+        'message': (
+            'This data is a placeholder to show how the site works.'
+            if DEMO_ENVIRONMENT else None
+        ),
+    })
 
 @app.route('/api/debug/session', methods=['GET'])
 def debug_session():
@@ -467,9 +502,12 @@ def update_user_location():
 
 # Plant Management Routes
 @app.route('/api/plants', methods=['GET'])
-@login_required
+@login_required_unless_demo
 def get_plants():
-    """Get all plants for current user"""
+    """Get all plants for current user (or demo basil plant)."""
+    if DEMO_ENVIRONMENT:
+        return jsonify(demo_generator.get_plants())
+
     plants = Plant.query.filter_by(user_id=current_user.id).all()
     return jsonify([{
         'id': plant.id,
@@ -534,9 +572,12 @@ def delete_plant(plant_id):
 
 # Sensor Data Routes
 @app.route('/api/sensor-data', methods=['GET'])
-@login_required
+@login_required_unless_demo
 def get_sensor_data():
-    """Get current sensor data for user's plants"""
+    """Get current sensor data for user's plants (or demo placeholder data)."""
+    if DEMO_ENVIRONMENT:
+        return jsonify(demo_generator.get_sensor_data())
+
     plant_id = request.args.get('plant_id', type=int)
     
     if plant_id:
@@ -652,11 +693,14 @@ def update_sensor_data():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/sensor-data/history', methods=['GET'])
-@login_required
+@login_required_unless_demo
 def get_sensor_history():
     """Get sensor reading history"""
     plant_id = request.args.get('plant_id', type=int)
     limit = request.args.get('limit', 20, type=int)
+
+    if DEMO_ENVIRONMENT:
+        return jsonify(demo_generator.get_sensor_history(limit=limit))
     
     if not plant_id:
         return jsonify({'error': 'plant_id required'}), 400
@@ -677,9 +721,12 @@ def get_sensor_history():
 
 
 @app.route('/api/weather', methods=['GET'])
-@login_required
+@login_required_unless_demo
 def get_weather():
-    """Fetch weather data from NWS API"""
+    """Fetch weather data from NWS API (or demo placeholder weather)."""
+    if DEMO_ENVIRONMENT:
+        return jsonify(demo_generator.get_weather())
+
     try:
         # Use user's saved location, or request params (no fake defaults)
         lat = request.args.get('lat') or current_user.latitude
@@ -758,7 +805,7 @@ def get_weather():
         
         weather = {
             'temperature': round(temp, 1),
-            'humidity': round(humidity, 1),
+            'humidity': round(humidity, 1) if humidity is not None else None,
             'precipitation': current_period.get('probabilityOfPrecipitation', {}).get('value', 0),
             'windSpeed': round(wind_speed, 1),
             'forecast': current_period.get('shortForecast', 'Unknown'),
@@ -805,9 +852,12 @@ def _parse_wind_speed(wind_string):
     return 5.0  # Default reasonable wind speed
 
 @app.route('/api/predict', methods=['POST'])
-@login_required
+@login_required_unless_demo
 def predict_watering():
     """Predict when to water based on sensor and weather data using Random Forest"""
+    if DEMO_ENVIRONMENT:
+        return jsonify(demo_generator.get_prediction())
+
     try:
         data = request.json
         sensor = data.get('sensor', {})
@@ -1078,9 +1128,12 @@ def calculate_plant_health_score(plant_id):
     }
 
 @app.route('/api/plant-health/<int:plant_id>', methods=['GET'])
-@login_required
+@login_required_unless_demo
 def get_plant_health(plant_id):
     """Get plant health score for a specific plant using ML model if available"""
+    if DEMO_ENVIRONMENT:
+        return jsonify(demo_generator.get_plant_health())
+
     plant = Plant.query.filter_by(id=plant_id, user_id=current_user.id).first()
     if not plant:
         return jsonify({'error': 'Plant not found'}), 404
@@ -1186,7 +1239,7 @@ def get_plant_health(plant_id):
         return jsonify(health)
 
 @app.route('/api/chat', methods=['POST'])
-@login_required
+@login_required_unless_demo
 def chat():
     """Chat endpoint using AutoGen with OpenAI"""
     try:
@@ -1196,14 +1249,17 @@ def chat():
         
         if not user_message:
             return jsonify({'error': 'Message is required'}), 400
+
+        api_key = os.environ.get('OPENAI_API_KEY')
+        # Demo mode without an API key: answer from the same placeholder plant context
+        if DEMO_ENVIRONMENT and (not api_key or api_key.startswith('your_')):
+            return jsonify(demo_generator.get_chat_reply(user_message, context))
         
         # Import OpenAI (will be configured when API key is provided)
         try:
             import openai
             
             # Get API key from environment (user will set this later)
-            api_key = os.environ.get('OPENAI_API_KEY')
-            
             if not api_key:
                 # Return helpful message if API key not set
                 return jsonify({
@@ -1250,6 +1306,7 @@ Current Plant Information:
 - Health Score: {health_data.get('score', 'N/A')}/100
 - Health Status: {health_data.get('status', 'Unknown')}
 - Last Reading Time: {last_reading_str}
+- Demo Mode: {'yes — placeholder data' if DEMO_ENVIRONMENT or sensor_data.get('is_demo') else 'no — live sensors'}
 
 Current Sensor Readings:
 - Soil Moisture: {sensor_data.get('moisture', 'N/A')}%
@@ -1262,7 +1319,7 @@ Current Weather:
 - Humidity: {weather_data.get('humidity', 'N/A')}%
 - Forecast: {weather_data.get('forecast', weather_data.get('description', 'N/A'))}
 - Precipitation: {weather_data.get('precipitation', 'N/A')}%
-- Wind Speed: {weather_data.get('wind_speed', 'N/A')} mph
+- Wind Speed: {weather_data.get('windSpeed', weather_data.get('wind_speed', 'N/A'))} mph
 
 Watering Prediction:
 - Hours Until Watering: {prediction_data.get('hoursUntilWatering', 'N/A')}
@@ -1296,15 +1353,17 @@ Sensor Trends (over recent readings):
 - Light Change: {trends.get('lightTrend', 0):+.1f} lux
 """
             
-            # Add health breakdown if available
-            if health_data and isinstance(health_data, dict) and 'breakdown' in health_data:
-                breakdown = health_data.get('breakdown', {})
+            # Add health breakdown if available (supports details or breakdown keys)
+            health_details = None
+            if health_data and isinstance(health_data, dict):
+                health_details = health_data.get('details') or health_data.get('breakdown')
+            if health_details:
                 context_info += f"""
 Health Score Breakdown:
-- Moisture Score: {breakdown.get('moisture_score', 'N/A')}/25
-- Temperature Score: {breakdown.get('temperature_score', 'N/A')}/25
-- Light Score: {breakdown.get('light_score', 'N/A')}/25
-- Consistency Score: {breakdown.get('consistency_score', 'N/A')}/25
+- Moisture Score: {health_details.get('moisture_score', 'N/A')}
+- Temperature Score: {health_details.get('temperature_score', 'N/A')}
+- Light Score: {health_details.get('light_score', 'N/A')}
+- Trend Score: {health_details.get('trend_score', health_details.get('consistency_score', 'N/A'))}
 """
             
             # Use OpenAI directly with AutoGen wrapper for better compatibility
@@ -1312,15 +1371,23 @@ Health Score Breakdown:
             
             client = OpenAI(api_key=api_key)
             
+            demo_note = ""
+            if DEMO_ENVIRONMENT or sensor_data.get('is_demo'):
+                demo_note = (
+                    "\nNOTE: This session is DEMO_ENVIRONMENT. Sensor/weather/health numbers are "
+                    "placeholders for a basil plant demo. Still answer as if advising on this plant, "
+                    "and briefly mention that readings are demo placeholders when relevant.\n"
+                )
+
             # Create system message with context
             system_message = f"""You are a helpful plant care assistant. You help users understand their plant's health, 
 provide care recommendations, and answer questions about plant maintenance. Use the following REAL-TIME context 
 to provide personalized advice:
 
 {context_info}
-
+{demo_note}
 IMPORTANT GUIDELINES:
-- All data provided is from real sensors connected to the plant (not simulated)
+- Use the sensor readings, health score, weather, and watering prediction above — stay synced with those numbers
 - Use the recent history and trends to identify patterns and changes
 - Reference specific sensor readings and timestamps when relevant
 - Consider the watering prediction when giving watering advice
@@ -1367,11 +1434,15 @@ Be friendly, informative, and provide actionable advice based on the current sen
             
             return jsonify({
                 'message': message_content,
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
+                'model': model_used,
+                'is_demo': DEMO_ENVIRONMENT,
             })
             
         except ImportError:
             # Fallback if AutoGen not installed
+            if DEMO_ENVIRONMENT:
+                return jsonify(demo_generator.get_chat_reply(user_message, context))
             return jsonify({
                 'error': 'AutoGen not installed',
                 'message': 'Please install AutoGen: pip install pyautogen openai'
@@ -1382,6 +1453,16 @@ Be friendly, informative, and provide actionable advice based on the current sen
         print(f'Chat error: {e}')
         import traceback
         traceback.print_exc()
+
+        # In demo mode, never hard-fail the chat UI — answer from placeholder context
+        if DEMO_ENVIRONMENT:
+            try:
+                return jsonify(demo_generator.get_chat_reply(
+                    request.json.get('message', '') if request.json else '',
+                    request.json.get('context', {}) if request.json else {}
+                ))
+            except Exception:
+                pass
         
         # Provide helpful error messages for common issues
         if 'insufficient_quota' in error_str or 'quota' in error_str.lower():

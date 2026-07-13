@@ -107,7 +107,7 @@ const PlantHealthScore = ({ plantId }) => {
               </span>
             )}
           </div>
-          {model_type && (
+          {model_type && !/demo/i.test(model_type) && (
             <div className="model-type-badge">
               {model_type}
             </div>

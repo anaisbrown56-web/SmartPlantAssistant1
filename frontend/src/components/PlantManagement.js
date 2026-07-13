@@ -7,7 +7,8 @@ const PlantManagement = ({
   selectedPlantId,
   onPlantSelect,
   onPlantCreated,
-  onPlantDeleted
+  onPlantDeleted,
+  readOnly = false
 }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [plantName, setPlantName] = useState('');
@@ -64,31 +65,35 @@ const PlantManagement = ({
             >
               <span className="plant-name">{plant.name}</span>
               <span className="plant-sensor-id">Sensor: {plant.sensor_id}</span>
-              <button
-                className="delete-plant-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeletePlant(plant.id);
-                }}
-                title="Delete plant"
-              >
-                ×
-              </button>
+              {!readOnly && (
+                <button
+                  className="delete-plant-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeletePlant(plant.id);
+                  }}
+                  title="Delete plant"
+                >
+                  ×
+                </button>
+              )}
             </div>
           ))}
           {plants.length === 0 && (
             <p className="no-plants">No plants yet. Add one to get started!</p>
           )}
         </div>
-        <button
-          className="add-plant-button"
-          onClick={() => setShowAddForm(!showAddForm)}
-        >
-          {showAddForm ? 'Cancel' : '+ Add Plant'}
-        </button>
+        {!readOnly && (
+          <button
+            className="add-plant-button"
+            onClick={() => setShowAddForm(!showAddForm)}
+          >
+            {showAddForm ? 'Cancel' : '+ Add Plant'}
+          </button>
+        )}
       </div>
 
-      {showAddForm && (
+      {!readOnly && showAddForm && (
         <div className="add-plant-form">
           <h4>Add New Plant</h4>
           {error && <div className="error-message">{error}</div>}

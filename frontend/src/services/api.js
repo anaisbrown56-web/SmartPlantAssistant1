@@ -12,6 +12,12 @@ const api = axios.create({
   withCredentials: true, // Include cookies for session management
 });
 
+// Demo mode status
+export const getDemoStatus = async () => {
+  const response = await api.get('/demo-status');
+  return response.data;
+};
+
 // Authentication
 export const login = async (username, password) => {
   const response = await api.post('/login', { username, password });

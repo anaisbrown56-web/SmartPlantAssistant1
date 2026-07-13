@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import './Auth.css';
 
-const Login = ({ onSwitchToRegister }) => {
+const Login = ({ onSwitchToRegister, demoEnvironment = false, onBackToDemo = null }) => {
   const { login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -67,6 +67,13 @@ const Login = ({ onSwitchToRegister }) => {
                 Create Account
               </button>
             </p>
+            {demoEnvironment && onBackToDemo && (
+              <p className="auth-switch">
+                <button type="button" onClick={onBackToDemo} className="link-button">
+                  ← Back to basil demo
+                </button>
+              </p>
+            )}
           </div>
 
           <div className="auth-info-section">

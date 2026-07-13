@@ -76,6 +76,24 @@
   backdrop-filter: blur(10px);
 }
 
+.demo-banner {
+  background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
+  color: #5d4037;
+  padding: 12px 20px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 500;
+  border: 1px solid rgba(255, 193, 7, 0.45);
+  box-shadow: 0 2px 8px rgba(93, 64, 55, 0.08);
+}
+
+.demo-banner-bottom {
+  margin-top: 24px;
+  margin-bottom: 0;
+}
+
 .main-dashboard-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

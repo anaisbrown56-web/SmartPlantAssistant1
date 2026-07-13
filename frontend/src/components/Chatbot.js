@@ -10,10 +10,13 @@ const Chatbot = ({
   prediction = null,
   history = []
 }) => {
+  const isDemo = !!(sensorData?.is_demo);
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: `Hello! I'm your Smart Plant Assistant chatbot. I can help you understand your plant's health, sensor readings, and provide care recommendations. How can I assist you today?`
+      content: isDemo
+        ? `Hello! I'm your Plant Care Assistant for ${plantName || 'Basil'}. I can see the live demo readings on this page and will answer using those numbers. Ask me about moisture, light, health, or watering.`
+        : `Hello! I'm your Smart Plant Assistant chatbot. I can help you understand your plant's health, sensor readings, and provide care recommendations. How can I assist you today?`
     }
   ]);
   const [input, setInput] = useState('');
@@ -98,7 +101,7 @@ const Chatbot = ({
     <div className="chatbot-container">
       <div className="chatbot-header">
         <h3>💬 Plant Care Assistant</h3>
-        <span className="chatbot-status">AI-powered</span>
+        <span className="chatbot-status">{isDemo ? 'Synced to demo data' : 'AI-powered'}</span>
       </div>
       <div className="chatbot-messages">
         {messages.map((msg, idx) => (
